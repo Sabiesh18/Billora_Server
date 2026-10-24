@@ -74,10 +74,14 @@ public class UserDto {
         this.phone = phone;
     }
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"isActive", "is_active", "active"})
+    @com.fasterxml.jackson.annotation.JsonProperty("isActive")
     public Boolean getActive() {
         return isActive;
     }
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"isActive", "is_active", "active"})
+    @com.fasterxml.jackson.annotation.JsonProperty("isActive")
     public void setActive(Boolean active) {
         isActive = active;
     }

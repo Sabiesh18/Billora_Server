@@ -105,18 +105,26 @@ public class MenuItemDto {
         this.taxRate = taxRate;
     }
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"isAvailable", "is_available", "available"})
+    @com.fasterxml.jackson.annotation.JsonProperty("isAvailable")
     public Boolean getAvailable() {
         return isAvailable;
     }
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"isAvailable", "is_available", "available"})
+    @com.fasterxml.jackson.annotation.JsonProperty("isAvailable")
     public void setAvailable(Boolean available) {
         isAvailable = available;
     }
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"isActive", "is_active", "active"})
+    @com.fasterxml.jackson.annotation.JsonProperty("isActive")
     public Boolean getActive() {
         return isActive;
     }
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"isActive", "is_active", "active"})
+    @com.fasterxml.jackson.annotation.JsonProperty("isActive")
     public void setActive(Boolean active) {
         isActive = active;
     }
