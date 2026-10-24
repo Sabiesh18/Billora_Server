@@ -15,7 +15,7 @@ public class BillingApplication {
         SpringApplication.run(BillingApplication.class, args);
         System.out.println("=================================================================");
         System.out.println("  Restaurant Billing Backend successfully started on port 8080   ");
-        System.out.println("  Database target: localhost:5432/restaurant_db                  ");
+        System.out.println("  Database target: localhost:5432/Billora                        ");
         System.out.println("  Ready to process offline POS and hotel billing requests        ");
         System.out.println("=================================================================");
     }
