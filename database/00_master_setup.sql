@@ -1,6 +1,6 @@
 -- =============================================================================
 -- RESTAURANT BILLING SOFTWARE - COMPLETE MASTER DATABASE SETUP SCRIPT
--- Execute this file directly in pgAdmin 4 Query Tool on your database (e.g. 'restaurant_db')
+-- Execute this file directly in pgAdmin 4 Query Tool on your database (e.g. 'Billora')
 -- All tables are prefixed with tbl_
 -- All functions are prefixed with fn_
 -- No explicit database constraints (FK/UNIQUE/CHECK) as per requirements
