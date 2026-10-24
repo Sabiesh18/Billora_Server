@@ -52,12 +52,12 @@ SELECT * FROM fn_CategoryCreate('Desserts', 'Traditional Indian sweets and ice c
 -- 3. Seed Menu Items
 DO $$
 DECLARE
-    v_cat_starters VARCHAR(50);
-    v_cat_main VARCHAR(50);
-    v_cat_breads VARCHAR(50);
-    v_cat_biryani VARCHAR(50);
-    v_cat_drinks VARCHAR(50);
-    v_cat_dessert VARCHAR(50);
+    v_cat_starters UUID;
+    v_cat_main UUID;
+    v_cat_breads UUID;
+    v_cat_biryani UUID;
+    v_cat_drinks UUID;
+    v_cat_dessert UUID;
 BEGIN
     SELECT category_id INTO v_cat_starters FROM tbl_Categories WHERE category_name = 'Starters & Appetizers' LIMIT 1;
     SELECT category_id INTO v_cat_main FROM tbl_Categories WHERE category_name = 'Main Course' LIMIT 1;
@@ -67,36 +67,36 @@ BEGIN
     SELECT category_id INTO v_cat_dessert FROM tbl_Categories WHERE category_name = 'Desserts' LIMIT 1;
 
     -- Starters
-    PERFORM fn_MenuItemCreate(v_cat_starters, 'STR-101', 'Paneer Tikka', 'Charcoal grilled cottage cheese with bell peppers', 240.00, 'VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_starters, 'STR-102', 'Crispy Corn Salt & Pepper', 'Sweet corn tossed with scallions and mild spices', 190.00, 'VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_starters, 'STR-103', 'Chicken 65', 'Classic spicy south Indian deep fried chicken bites', 280.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_starters, 'STR-104', 'Tandoori Chicken (Half)', 'Clay oven roasted marinated chicken drumsticks', 310.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_starters::text, 'STR-101', 'Paneer Tikka', 'Charcoal grilled cottage cheese with bell peppers', 240.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_starters::text, 'STR-102', 'Crispy Corn Salt & Pepper', 'Sweet corn tossed with scallions and mild spices', 190.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_starters::text, 'STR-103', 'Chicken 65', 'Classic spicy south Indian deep fried chicken bites', 280.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_starters::text, 'STR-104', 'Tandoori Chicken (Half)', 'Clay oven roasted marinated chicken drumsticks', 310.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
 
     -- Main Course
-    PERFORM fn_MenuItemCreate(v_cat_main, 'MC-201', 'Butter Chicken Masala', 'Tender shredded chicken in rich tomato cashew gravy', 360.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_main, 'MC-202', 'Mutton Rogan Josh', 'Kashmiri style aromatic slow cooked lamb curry', 440.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_main, 'MC-203', 'Paneer Butter Masala', 'Fresh cottage cheese cubes in mildly sweet butter sauce', 290.00, 'VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_main, 'MC-204', 'Dal Makhani', 'Slow simmered black lentils with cream and butter', 220.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_main::text, 'MC-201', 'Butter Chicken Masala', 'Tender shredded chicken in rich tomato cashew gravy', 360.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_main::text, 'MC-202', 'Mutton Rogan Josh', 'Kashmiri style aromatic slow cooked lamb curry', 440.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_main::text, 'MC-203', 'Paneer Butter Masala', 'Fresh cottage cheese cubes in mildly sweet butter sauce', 290.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_main::text, 'MC-204', 'Dal Makhani', 'Slow simmered black lentils with cream and butter', 220.00, 'VEG', 5.00, TRUE, 'SETUP');
 
     -- Breads
-    PERFORM fn_MenuItemCreate(v_cat_breads, 'BRD-301', 'Butter Naan', 'Tandoor baked leavened flatbread brushed with butter', 55.00, 'VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_breads, 'BRD-302', 'Garlic Naan', 'Topped with minced garlic, coriander, and melted butter', 70.00, 'VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_breads, 'BRD-303', 'Tandoori Roti', 'Crisp whole wheat bread baked in clay oven', 30.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_breads::text, 'BRD-301', 'Butter Naan', 'Tandoor baked leavened flatbread brushed with butter', 55.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_breads::text, 'BRD-302', 'Garlic Naan', 'Topped with minced garlic, coriander, and melted butter', 70.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_breads::text, 'BRD-303', 'Tandoori Roti', 'Crisp whole wheat bread baked in clay oven', 30.00, 'VEG', 5.00, TRUE, 'SETUP');
 
     -- Biryani & Rice
-    PERFORM fn_MenuItemCreate(v_cat_biryani, 'RCE-401', 'Hyderabadi Chicken Dum Biryani', 'Long grain basmati rice layered with spiced marinated chicken', 330.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_biryani, 'RCE-402', 'Mutton Dum Biryani', 'Authentic slow-cooked saffron rice with tender mutton cuts', 450.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_biryani, 'RCE-403', 'Royal Veg Biryani', 'Seasonal garden vegetables cooked in fragrant basmati pot', 240.00, 'VEG', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_biryani, 'RCE-404', 'Jeera Rice with Dal Tadka Combo', 'Cumin tempered basmati rice with yellow lentil tadka', 210.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_biryani::text, 'RCE-401', 'Hyderabadi Chicken Dum Biryani', 'Long grain basmati rice layered with spiced marinated chicken', 330.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_biryani::text, 'RCE-402', 'Mutton Dum Biryani', 'Authentic slow-cooked saffron rice with tender mutton cuts', 450.00, 'NON_VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_biryani::text, 'RCE-403', 'Royal Veg Biryani', 'Seasonal garden vegetables cooked in fragrant basmati pot', 240.00, 'VEG', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_biryani::text, 'RCE-404', 'Jeera Rice with Dal Tadka Combo', 'Cumin tempered basmati rice with yellow lentil tadka', 210.00, 'VEG', 5.00, TRUE, 'SETUP');
 
     -- Beverages
-    PERFORM fn_MenuItemCreate(v_cat_drinks, 'DRK-501', 'Fresh Lime Soda (Sweet/Salt)', 'Freshly squeezed lime juice with sparkling club soda', 75.00, 'BEVERAGE', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_drinks, 'DRK-502', 'Classic Mango Lassi', 'Chilled yogurt smoothie infused with Alphonso mango pulp', 95.00, 'BEVERAGE', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_drinks, 'DRK-503', 'Masala Chai', 'Indian spiced ginger and cardamom tea', 45.00, 'BEVERAGE', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_drinks::text, 'DRK-501', 'Fresh Lime Soda (Sweet/Salt)', 'Freshly squeezed lime juice with sparkling club soda', 75.00, 'BEVERAGE', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_drinks::text, 'DRK-502', 'Classic Mango Lassi', 'Chilled yogurt smoothie infused with Alphonso mango pulp', 95.00, 'BEVERAGE', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_drinks::text, 'DRK-503', 'Masala Chai', 'Indian spiced ginger and cardamom tea', 45.00, 'BEVERAGE', 5.00, TRUE, 'SETUP');
 
     -- Desserts
-    PERFORM fn_MenuItemCreate(v_cat_dessert, 'DST-601', 'Gulab Jamun (2 Pcs)', 'Warm milk dumplings soaked in fragrant rose cardamom syrup', 85.00, 'DESSERT', 5.00, TRUE, 'SETUP');
-    PERFORM fn_MenuItemCreate(v_cat_dessert, 'DST-602', 'Sizzling Brownie with Vanilla Ice Cream', 'Hot walnut fudge brownie on sizzler plate with chocolate sauce', 170.00, 'DESSERT', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_dessert::text, 'DST-601', 'Gulab Jamun (2 Pcs)', 'Warm milk dumplings soaked in fragrant rose cardamom syrup', 85.00, 'DESSERT', 5.00, TRUE, 'SETUP');
+    PERFORM fn_MenuItemCreate(v_cat_dessert::text, 'DST-602', 'Sizzling Brownie with Vanilla Ice Cream', 'Hot walnut fudge brownie on sizzler plate with chocolate sauce', 170.00, 'DESSERT', 5.00, TRUE, 'SETUP');
 END $$;
 
 -- 4. Seed Dining Tables

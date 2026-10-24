@@ -34,19 +34,21 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_act_id VARCHAR(50);
+    v_act_id UUID;
+    v_user_uuid UUID;
 BEGIN
-    v_act_id := 'ACT_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISSMS') || '_' || substr(md5(random()::text), 1, 6);
+    v_act_id := gen_random_uuid();
+    v_user_uuid := CASE WHEN p_user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN p_user_id::uuid ELSE NULL END;
 
     INSERT INTO tbl_ActivityHistory (
         activity_id, user_id, username, activity_type, module,
         description, record_id, old_value, new_value, ip_address, created_at
     ) VALUES (
-        v_act_id, p_user_id, p_username, p_activity_type, p_module,
+        v_act_id, v_user_uuid, p_username, p_activity_type, p_module,
         p_description, p_record_id, p_old_val, p_new_val, p_ip_address, CURRENT_TIMESTAMP
     );
 
-    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Activity logged successfully'::VARCHAR, v_act_id, 1, 1, jsonb_build_object('activityId', v_act_id);
+    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Activity logged successfully'::VARCHAR, v_act_id::VARCHAR, 1, 1, jsonb_build_object('activityId', v_act_id::text);
 EXCEPTION WHEN OTHERS THEN
     RETURN QUERY SELECT FALSE, 'ACT_ERR'::VARCHAR, SQLERRM::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
 END;
@@ -93,8 +95,8 @@ BEGIN
 
     SELECT jsonb_agg(
         jsonb_build_object(
-            'activityId', a.activity_id,
-            'userId', a.user_id,
+            'activityId', a.activity_id::text,
+            'userId', a.user_id::text,
             'username', a.username,
             'activityType', a.activity_type,
             'module', a.module,
@@ -153,9 +155,9 @@ BEGIN
         PERFORM fn_LogActivity('SYSTEM', p_username, 'LOGIN_FAILED', 'AUTH', 'Failed login attempt for username: ' || p_username, NULL, NULL, NULL, p_ip_address);
         RETURN QUERY SELECT FALSE, 'AUTH_USER_NOT_FOUND'::VARCHAR, 'Invalid credentials'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
     ELSE
-        RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'User profile found'::VARCHAR, v_user.user_id, 1, 1,
+        RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'User profile found'::VARCHAR, v_user.user_id::VARCHAR, 1, 1,
             jsonb_build_object(
-                'userId', v_user.user_id,
+                'userId', v_user.user_id::text,
                 'username', v_user.username,
                 'passwordHash', v_user.password_hash,
                 'fullName', v_user.full_name,
@@ -192,7 +194,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_exists INT;
-    v_user_id VARCHAR(50);
+    v_user_id UUID;
 BEGIN
     -- Logical validation: username uniqueness
     SELECT COUNT(*) INTO v_exists FROM tbl_Users WHERE username = p_username;
@@ -201,7 +203,7 @@ BEGIN
         RETURN;
     END IF;
 
-    v_user_id := 'USR_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISS') || '_' || substr(md5(random()::text), 1, 4);
+    v_user_id := gen_random_uuid();
 
     INSERT INTO tbl_Users (
         user_id, username, password_hash, full_name, email, role, phone, is_active, created_at, updated_at
@@ -210,10 +212,10 @@ BEGIN
     );
 
     -- Log to activity history
-    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'USER_CREATED', 'USER', 'Created user: ' || p_username || ' (' || p_role || ')', v_user_id, NULL, jsonb_build_object('username', p_username, 'role', p_role));
+    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'USER_CREATED', 'USER', 'Created user: ' || p_username || ' (' || p_role || ')', v_user_id::text, NULL, jsonb_build_object('username', p_username, 'role', p_role));
 
-    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'User created successfully'::VARCHAR, v_user_id, 1, 1,
-        jsonb_build_object('userId', v_user_id, 'username', p_username, 'role', p_role, 'fullName', p_full_name);
+    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'User created successfully'::VARCHAR, v_user_id::VARCHAR, 1, 1,
+        jsonb_build_object('userId', v_user_id::text, 'username', p_username, 'role', p_role, 'fullName', p_full_name);
 END;
 $$;
 
@@ -241,7 +243,7 @@ AS $$
 DECLARE
     v_old tbl_Users%ROWTYPE;
 BEGIN
-    SELECT * INTO v_old FROM tbl_Users WHERE user_id = p_user_id;
+    SELECT * INTO v_old FROM tbl_Users WHERE user_id::text = p_user_id;
     IF v_old.user_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'USER_NOT_FOUND'::VARCHAR, 'User not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
@@ -254,7 +256,7 @@ BEGIN
         phone = COALESCE(p_phone, phone),
         is_active = COALESCE(p_is_active, is_active),
         updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = p_user_id;
+    WHERE user_id::text = p_user_id;
 
     PERFORM fn_LogActivity(
         p_actor_id, p_actor_id, 'USER_UPDATED', 'USER', 'Updated user: ' || v_old.username,
@@ -288,7 +290,7 @@ AS $$
 DECLARE
     v_old tbl_Users%ROWTYPE;
 BEGIN
-    SELECT * INTO v_old FROM tbl_Users WHERE user_id = p_user_id;
+    SELECT * INTO v_old FROM tbl_Users WHERE user_id::text = p_user_id;
     IF v_old.user_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'USER_NOT_FOUND'::VARCHAR, 'User not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
@@ -297,7 +299,7 @@ BEGIN
     UPDATE tbl_Users
     SET password_hash = p_new_password_hash,
         updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = p_user_id;
+    WHERE user_id::text = p_user_id;
 
     PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'PASSWORD_CHANGED', 'AUTH', 'Password changed for user: ' || v_old.username, p_user_id, NULL, NULL);
 
@@ -338,7 +340,7 @@ BEGIN
 
     SELECT jsonb_agg(
         jsonb_build_object(
-            'userId', u.user_id,
+            'userId', u.user_id::text,
             'username', u.username,
             'fullName', u.full_name,
             'email', u.email,
@@ -383,7 +385,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_cat_id VARCHAR(50);
+    v_cat_id UUID;
     v_exists INT;
 BEGIN
     SELECT COUNT(*) INTO v_exists FROM tbl_Categories WHERE category_name ILIKE p_category_name AND is_active = TRUE;
@@ -392,7 +394,7 @@ BEGIN
         RETURN;
     END IF;
 
-    v_cat_id := 'CAT_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISS') || '_' || substr(md5(random()::text), 1, 4);
+    v_cat_id := gen_random_uuid();
 
     INSERT INTO tbl_Categories (
         category_id, category_name, description, display_order, is_active, created_at, updated_at
@@ -400,10 +402,10 @@ BEGIN
         v_cat_id, p_category_name, p_description, COALESCE(p_display_order, 0), TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     );
 
-    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'CATEGORY_CREATED', 'MENU', 'Created category: ' || p_category_name, v_cat_id, NULL, jsonb_build_object('name', p_category_name));
+    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'CATEGORY_CREATED', 'MENU', 'Created category: ' || p_category_name, v_cat_id::text, NULL, jsonb_build_object('name', p_category_name));
 
-    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Category created'::VARCHAR, v_cat_id, 1, 1,
-        jsonb_build_object('categoryId', v_cat_id, 'categoryName', p_category_name, 'displayOrder', p_display_order);
+    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Category created'::VARCHAR, v_cat_id::VARCHAR, 1, 1,
+        jsonb_build_object('categoryId', v_cat_id::text, 'categoryName', p_category_name, 'displayOrder', p_display_order);
 END;
 $$;
 
@@ -429,7 +431,7 @@ AS $$
 DECLARE
     v_old tbl_Categories%ROWTYPE;
 BEGIN
-    SELECT * INTO v_old FROM tbl_Categories WHERE category_id = p_category_id;
+    SELECT * INTO v_old FROM tbl_Categories WHERE category_id::text = p_category_id;
     IF v_old.category_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'CAT_NOT_FOUND'::VARCHAR, 'Category not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
@@ -441,7 +443,7 @@ BEGIN
         display_order = COALESCE(p_display_order, display_order),
         is_active = COALESCE(p_is_active, is_active),
         updated_at = CURRENT_TIMESTAMP
-    WHERE category_id = p_category_id;
+    WHERE category_id::text = p_category_id;
 
     PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'CATEGORY_UPDATED', 'MENU', 'Updated category: ' || v_old.category_name, p_category_id, NULL, jsonb_build_object('name', p_category_name, 'isActive', p_is_active));
 
@@ -470,7 +472,7 @@ DECLARE
 BEGIN
     SELECT jsonb_agg(
         jsonb_build_object(
-            'categoryId', c.category_id,
+            'categoryId', c.category_id::text,
             'categoryName', c.category_name,
             'description', c.description,
             'displayOrder', c.display_order,
@@ -518,7 +520,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_item_id VARCHAR(50);
+    v_item_id UUID;
     v_exists INT;
 BEGIN
     -- Logical validation: item_code uniqueness if provided
@@ -530,19 +532,21 @@ BEGIN
         END IF;
     END IF;
 
-    v_item_id := 'ITM_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISS') || '_' || substr(md5(random()::text), 1, 4);
+    v_item_id := gen_random_uuid();
 
     INSERT INTO tbl_MenuItems (
         item_id, category_id, item_code, item_name, description, price, food_type, tax_rate, is_available, is_active, created_at, updated_at
     ) VALUES (
-        v_item_id, p_category_id, COALESCE(p_item_code, v_item_id), p_item_name, p_description, GREATEST(p_price, 0),
+        v_item_id,
+        CASE WHEN p_category_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN p_category_id::uuid ELSE NULL END,
+        COALESCE(p_item_code, v_item_id::text), p_item_name, p_description, GREATEST(p_price, 0),
         COALESCE(p_food_type, 'VEG'), COALESCE(p_tax_rate, 5.00), COALESCE(p_is_available, TRUE), TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     );
 
-    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'MENU_ITEM_CREATED', 'MENU', 'Created item: ' || p_item_name || ' (Rs. ' || p_price || ')', v_item_id, NULL, jsonb_build_object('name', p_item_name, 'price', p_price));
+    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'MENU_ITEM_CREATED', 'MENU', 'Created item: ' || p_item_name || ' (Rs. ' || p_price || ')', v_item_id::text, NULL, jsonb_build_object('name', p_item_name, 'price', p_price));
 
-    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Menu item created successfully'::VARCHAR, v_item_id, 1, 1,
-        jsonb_build_object('itemId', v_item_id, 'itemName', p_item_name, 'price', p_price);
+    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Menu item created successfully'::VARCHAR, v_item_id::VARCHAR, 1, 1,
+        jsonb_build_object('itemId', v_item_id::text, 'itemName', p_item_name, 'price', p_price);
 END;
 $$;
 
@@ -573,14 +577,14 @@ AS $$
 DECLARE
     v_old tbl_MenuItems%ROWTYPE;
 BEGIN
-    SELECT * INTO v_old FROM tbl_MenuItems WHERE item_id = p_item_id;
+    SELECT * INTO v_old FROM tbl_MenuItems WHERE item_id::text = p_item_id;
     IF v_old.item_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'ITEM_NOT_FOUND'::VARCHAR, 'Menu item not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
     END IF;
 
     UPDATE tbl_MenuItems
-    SET category_id = COALESCE(p_category_id, category_id),
+    SET category_id = CASE WHEN p_category_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN p_category_id::uuid ELSE category_id END,
         item_code = COALESCE(p_item_code, item_code),
         item_name = COALESCE(p_item_name, item_name),
         description = COALESCE(p_description, description),
@@ -590,7 +594,7 @@ BEGIN
         is_available = COALESCE(p_is_available, is_available),
         is_active = COALESCE(p_is_active, is_active),
         updated_at = CURRENT_TIMESTAMP
-    WHERE item_id = p_item_id;
+    WHERE item_id::text = p_item_id;
 
     PERFORM fn_LogActivity(
         p_actor_id, p_actor_id, 'MENU_ITEM_UPDATED', 'MENU', 'Updated item: ' || v_old.item_name,
@@ -634,7 +638,7 @@ BEGIN
     SELECT COUNT(*) INTO v_total
     FROM tbl_MenuItems m
     WHERE m.is_active = TRUE
-      AND (p_category_id IS NULL OR m.category_id = p_category_id)
+      AND (p_category_id IS NULL OR m.category_id::text = p_category_id)
       AND (p_food_type IS NULL OR m.food_type = p_food_type)
       AND (NOT p_only_available OR m.is_available = TRUE)
       AND (p_search IS NULL OR m.item_name ILIKE '%' || p_search || '%' OR m.item_code ILIKE '%' || p_search || '%');
@@ -643,8 +647,8 @@ BEGIN
 
     SELECT jsonb_agg(
         jsonb_build_object(
-            'itemId', m.item_id,
-            'categoryId', m.category_id,
+            'itemId', m.item_id::text,
+            'categoryId', m.category_id::text,
             'categoryName', c.category_name,
             'itemCode', m.item_code,
             'itemName', m.item_name,
@@ -661,7 +665,7 @@ BEGIN
         FROM tbl_MenuItems m
         LEFT JOIN tbl_Categories c ON c.category_id = m.category_id
         WHERE m.is_active = TRUE
-          AND (p_category_id IS NULL OR m.category_id = p_category_id)
+          AND (p_category_id IS NULL OR m.category_id::text = p_category_id)
           AND (p_food_type IS NULL OR m.food_type = p_food_type)
           AND (NOT p_only_available OR m.is_available = TRUE)
           AND (p_search IS NULL OR m.item_name ILIKE '%' || p_search || '%' OR m.item_code ILIKE '%' || p_search || '%')
@@ -695,7 +699,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_table_id VARCHAR(50);
+    v_table_id UUID;
     v_exists INT;
 BEGIN
     SELECT COUNT(*) INTO v_exists FROM tbl_Tables WHERE table_number = p_table_number AND is_active = TRUE;
@@ -704,7 +708,7 @@ BEGIN
         RETURN;
     END IF;
 
-    v_table_id := 'TBL_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISS') || '_' || substr(md5(random()::text), 1, 4);
+    v_table_id := gen_random_uuid();
 
     INSERT INTO tbl_Tables (
         table_id, table_number, seating_capacity, location_area, status, is_active, created_at, updated_at
@@ -712,10 +716,10 @@ BEGIN
         v_table_id, p_table_number, COALESCE(p_seating_capacity, 4), COALESCE(p_location_area, 'Main Dining'), 'AVAILABLE', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     );
 
-    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'TABLE_CREATED', 'TABLE', 'Created Table: ' || p_table_number, v_table_id, NULL, jsonb_build_object('tableNumber', p_table_number));
+    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'TABLE_CREATED', 'TABLE', 'Created Table: ' || p_table_number, v_table_id::text, NULL, jsonb_build_object('tableNumber', p_table_number));
 
-    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Table created successfully'::VARCHAR, v_table_id, 1, 1,
-        jsonb_build_object('tableId', v_table_id, 'tableNumber', p_table_number, 'status', 'AVAILABLE');
+    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Table created successfully'::VARCHAR, v_table_id::VARCHAR, 1, 1,
+        jsonb_build_object('tableId', v_table_id::text, 'tableNumber', p_table_number, 'status', 'AVAILABLE');
 END;
 $$;
 
@@ -739,7 +743,7 @@ AS $$
 DECLARE
     v_old tbl_Tables%ROWTYPE;
 BEGIN
-    SELECT * INTO v_old FROM tbl_Tables WHERE table_id = p_table_id;
+    SELECT * INTO v_old FROM tbl_Tables WHERE table_id::text = p_table_id;
     IF v_old.table_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'TABLE_NOT_FOUND'::VARCHAR, 'Table not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
@@ -747,9 +751,9 @@ BEGIN
 
     UPDATE tbl_Tables
     SET status = p_status,
-        current_bill_id = CASE WHEN p_status = 'AVAILABLE' THEN NULL ELSE COALESCE(p_current_bill_id, current_bill_id) END,
+        current_bill_id = CASE WHEN p_status = 'AVAILABLE' THEN NULL WHEN p_current_bill_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN p_current_bill_id::uuid ELSE current_bill_id END,
         updated_at = CURRENT_TIMESTAMP
-    WHERE table_id = p_table_id;
+    WHERE table_id::text = p_table_id;
 
     RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Table status updated'::VARCHAR, p_table_id, 1, 1,
         jsonb_build_object('tableId', p_table_id, 'tableNumber', v_old.table_number, 'status', p_status);
@@ -774,12 +778,12 @@ DECLARE
 BEGIN
     SELECT jsonb_agg(
         jsonb_build_object(
-            'tableId', t.table_id,
+            'tableId', t.table_id::text,
             'tableNumber', t.table_number,
             'seatingCapacity', t.seating_capacity,
             'locationArea', t.location_area,
             'status', t.status,
-            'currentBillId', t.current_bill_id,
+            'currentBillId', t.current_bill_id::text,
             'billNumber', b.bill_number,
             'grandTotal', b.grand_total,
             'billCreatedAt', to_char(b.created_at, 'YYYY-MM-DD"T"HH24:MI:SS')
@@ -827,7 +831,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_bill_id VARCHAR(50);
+    v_bill_id UUID;
     v_bill_number VARCHAR(50);
     v_sub_total NUMERIC(12, 2) := 0.00;
     v_discount_amount NUMERIC(12, 2) := 0.00;
@@ -855,7 +859,7 @@ BEGIN
 
     -- If Dine-in, check table availability
     IF p_order_type = 'DINE_IN' AND p_table_id IS NOT NULL THEN
-        SELECT status INTO v_table_status FROM tbl_Tables WHERE table_id = p_table_id AND is_active = TRUE;
+        SELECT status INTO v_table_status FROM tbl_Tables WHERE table_id::text = p_table_id AND is_active = TRUE;
         IF v_table_status IS NULL THEN
             RETURN QUERY SELECT FALSE, 'INVALID_TABLE'::VARCHAR, 'Selected table does not exist'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
             RETURN;
@@ -865,7 +869,7 @@ BEGIN
     -- Generate Unique Bill Number
     SELECT COUNT(*) + 1 INTO v_seq_num FROM tbl_Bills WHERE created_at::DATE = CURRENT_DATE;
     v_bill_number := 'INV-' || to_char(CURRENT_DATE, 'YYYYMMDD') || '-' || lpad(v_seq_num::text, 4, '0');
-    v_bill_id := 'BIL_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISS') || '_' || substr(md5(random()::text), 1, 4);
+    v_bill_id := gen_random_uuid();
 
     -- Calculate subtotal from items array
     FOR v_item IN SELECT * FROM jsonb_to_recordset(p_items_json) AS x(
@@ -892,8 +896,10 @@ BEGIN
             bill_item_id, bill_id, item_id, item_name, quantity,
             unit_price, tax_rate, tax_amount, total_price, notes, is_cancelled, created_at
         ) VALUES (
-            'BIT_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISSMS') || '_' || substr(md5(random()::text), 1, 4),
-            v_bill_id, v_item.itemId, v_item.itemName, v_qty,
+            gen_random_uuid(),
+            v_bill_id,
+            CASE WHEN v_item.itemId ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN v_item.itemId::uuid ELSE NULL END,
+            v_item.itemName, v_qty,
             v_unit_price, v_item_tax_rate, v_item_tax_amt, v_item_total, v_item.notes, FALSE, CURRENT_TIMESTAMP
         );
     END LOOP;
@@ -926,10 +932,13 @@ BEGIN
         payment_mode, payment_status, bill_status, notes, cashier_id,
         created_at, updated_at
     ) VALUES (
-        v_bill_id, v_bill_number, COALESCE(p_order_type, 'DINE_IN'), p_table_id, p_customer_name, p_customer_phone,
+        v_bill_id, v_bill_number, COALESCE(p_order_type, 'DINE_IN'),
+        CASE WHEN p_table_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN p_table_id::uuid ELSE NULL END,
+        p_customer_name, p_customer_phone,
         v_sub_total, COALESCE(p_discount_type, 'NONE'), COALESCE(p_discount_value, 0.00), v_discount_amount,
         v_tax_rate, v_tax_amount, v_round_off, v_grand_total,
-        'UNPAID', 'PENDING', 'ACTIVE', p_notes, p_cashier_id,
+        'UNPAID', 'PENDING', 'ACTIVE', p_notes,
+        CASE WHEN p_cashier_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN p_cashier_id::uuid ELSE NULL END,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     );
 
@@ -937,20 +946,20 @@ BEGIN
     IF p_order_type = 'DINE_IN' AND p_table_id IS NOT NULL THEN
         UPDATE tbl_Tables
         SET status = 'OCCUPIED', current_bill_id = v_bill_id, updated_at = CURRENT_TIMESTAMP
-        WHERE table_id = p_table_id;
+        WHERE table_id::text = p_table_id;
     END IF;
 
     -- Log to Activity History
     PERFORM fn_LogActivity(
         p_cashier_id, p_cashier_id, 'BILL_CREATED', 'BILLING',
         'Created bill #' || v_bill_number || ' for Rs. ' || v_grand_total || ' (' || p_order_type || ')',
-        v_bill_id, NULL,
+        v_bill_id::text, NULL,
         jsonb_build_object('billNumber', v_bill_number, 'grandTotal', v_grand_total, 'tableId', p_table_id)
     );
 
-    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Bill created successfully'::VARCHAR, v_bill_id, 1, 1,
+    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Bill created successfully'::VARCHAR, v_bill_id::VARCHAR, 1, 1,
         jsonb_build_object(
-            'billId', v_bill_id,
+            'billId', v_bill_id::text,
             'billNumber', v_bill_number,
             'orderType', p_order_type,
             'subTotal', v_sub_total,
@@ -984,9 +993,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_bill tbl_Bills%ROWTYPE;
-    v_txn_id VARCHAR(50);
+    v_txn_id UUID;
 BEGIN
-    SELECT * INTO v_bill FROM tbl_Bills WHERE bill_id = p_bill_id;
+    SELECT * INTO v_bill FROM tbl_Bills WHERE bill_id::text = p_bill_id;
     IF v_bill.bill_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'BILL_NOT_FOUND'::VARCHAR, 'Bill not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
@@ -1003,12 +1012,14 @@ BEGIN
     END IF;
 
     -- Record Payment Transaction
-    v_txn_id := 'TXN_' || to_char(CURRENT_TIMESTAMP, 'YYYYMMDDHH24MISS') || '_' || substr(md5(random()::text), 1, 4);
+    v_txn_id := gen_random_uuid();
 
     INSERT INTO tbl_PaymentTransactions (
         transaction_id, bill_id, payment_mode, amount, reference_number, transaction_status, transaction_date, notes
     ) VALUES (
-        v_txn_id, p_bill_id, COALESCE(p_payment_mode, 'CASH'), COALESCE(p_amount_paid, v_bill.grand_total),
+        v_txn_id,
+        CASE WHEN p_bill_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN p_bill_id::uuid ELSE NULL END,
+        COALESCE(p_payment_mode, 'CASH'), COALESCE(p_amount_paid, v_bill.grand_total),
         'REF-' || substr(md5(random()::text), 1, 8), 'SUCCESS', CURRENT_TIMESTAMP, p_notes
     );
 
@@ -1019,7 +1030,7 @@ BEGIN
         bill_status = 'SETTLED',
         settled_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
-    WHERE bill_id = p_bill_id;
+    WHERE bill_id::text = p_bill_id;
 
     -- Free Associated Dining Table
     IF v_bill.table_id IS NOT NULL THEN
@@ -1062,7 +1073,7 @@ AS $$
 DECLARE
     v_bill tbl_Bills%ROWTYPE;
 BEGIN
-    SELECT * INTO v_bill FROM tbl_Bills WHERE bill_id = p_bill_id;
+    SELECT * INTO v_bill FROM tbl_Bills WHERE bill_id::text = p_bill_id;
     IF v_bill.bill_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'BILL_NOT_FOUND'::VARCHAR, 'Bill not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
@@ -1078,7 +1089,7 @@ BEGIN
         cancelled_at = CURRENT_TIMESTAMP,
         cancellation_reason = COALESCE(p_cancellation_reason, 'No reason specified'),
         updated_at = CURRENT_TIMESTAMP
-    WHERE bill_id = p_bill_id;
+    WHERE bill_id::text = p_bill_id;
 
     -- Release table
     IF v_bill.table_id IS NOT NULL THEN
@@ -1120,7 +1131,7 @@ DECLARE
     v_items JSONB;
     v_table_num VARCHAR(50);
 BEGIN
-    SELECT * INTO v_bill FROM tbl_Bills WHERE bill_id = p_bill_id;
+    SELECT * INTO v_bill FROM tbl_Bills WHERE bill_id::text = p_bill_id;
     IF v_bill.bill_id IS NULL THEN
         RETURN QUERY SELECT FALSE, 'BILL_NOT_FOUND'::VARCHAR, 'Bill not found'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
@@ -1130,8 +1141,8 @@ BEGIN
 
     SELECT jsonb_agg(
         jsonb_build_object(
-            'billItemId', bi.bill_item_id,
-            'itemId', bi.item_id,
+            'billItemId', bi.bill_item_id::text,
+            'itemId', bi.item_id::text,
             'itemName', bi.item_name,
             'quantity', bi.quantity,
             'unitPrice', bi.unit_price,
@@ -1142,14 +1153,14 @@ BEGIN
         )
     ) INTO v_items
     FROM tbl_BillItems bi
-    WHERE bi.bill_id = p_bill_id AND bi.is_cancelled = FALSE;
+    WHERE bi.bill_id = v_bill.bill_id AND bi.is_cancelled = FALSE;
 
     RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Bill details retrieved'::VARCHAR, p_bill_id, 1, 1,
         jsonb_build_object(
-            'billId', v_bill.bill_id,
+            'billId', v_bill.bill_id::text,
             'billNumber', v_bill.bill_number,
             'orderType', v_bill.order_type,
-            'tableId', v_bill.table_id,
+            'tableId', v_bill.table_id::text,
             'tableNumber', COALESCE(v_table_num, 'N/A'),
             'customerName', v_bill.customer_name,
             'customerPhone', v_bill.customer_phone,
@@ -1165,7 +1176,7 @@ BEGIN
             'paymentStatus', v_bill.payment_status,
             'billStatus', v_bill.bill_status,
             'notes', v_bill.notes,
-            'cashierId', v_bill.cashier_id,
+            'cashierId', v_bill.cashier_id::text,
             'createdAt', to_char(v_bill.created_at, 'YYYY-MM-DD"T"HH24:MI:SS'),
             'settledAt', to_char(v_bill.settled_at, 'YYYY-MM-DD"T"HH24:MI:SS'),
             'items', COALESCE(v_items, '[]'::jsonb)
@@ -1216,7 +1227,7 @@ BEGIN
 
     SELECT jsonb_agg(
         jsonb_build_object(
-            'billId', b.bill_id,
+            'billId', b.bill_id::text,
             'billNumber', b.bill_number,
             'orderType', b.order_type,
             'tableNumber', COALESCE(t.table_number, 'N/A'),
@@ -1451,7 +1462,7 @@ BEGIN
 
         IF NOT FOUND THEN
             INSERT INTO tbl_Settings (setting_id, setting_key, setting_value, description, updated_at)
-            VALUES ('SET_' || substr(md5(random()::text), 1, 8), v_key, v_val, 'Restaurant Config', CURRENT_TIMESTAMP);
+            VALUES (gen_random_uuid(), v_key, v_val, 'Restaurant Config', CURRENT_TIMESTAMP);
         END IF;
     END LOOP;
 
