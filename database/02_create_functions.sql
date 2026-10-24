@@ -649,7 +649,7 @@ BEGIN
         jsonb_build_object(
             'itemId', m.item_id::text,
             'categoryId', m.category_id::text,
-            'categoryName', c.category_name,
+            'categoryName', m.category_name,
             'itemCode', m.item_code,
             'itemName', m.item_name,
             'description', m.description,
@@ -784,13 +784,13 @@ BEGIN
             'locationArea', t.location_area,
             'status', t.status,
             'currentBillId', t.current_bill_id::text,
-            'billNumber', b.bill_number,
-            'grandTotal', b.grand_total,
-            'billCreatedAt', to_char(b.created_at, 'YYYY-MM-DD"T"HH24:MI:SS')
+            'billNumber', t.bill_number,
+            'grandTotal', t.grand_total,
+            'billCreatedAt', to_char(t.bill_created_at, 'YYYY-MM-DD"T"HH24:MI:SS')
         )
     ) INTO v_result
     FROM (
-        SELECT t.*, b.bill_number, b.grand_total
+        SELECT t.*, b.bill_number, b.grand_total, b.created_at AS bill_created_at
         FROM tbl_Tables t
         LEFT JOIN tbl_Bills b ON b.bill_id = t.current_bill_id AND b.bill_status = 'ACTIVE'
         WHERE t.is_active = TRUE
@@ -813,7 +813,7 @@ CREATE OR REPLACE FUNCTION fn_CreateBill(
     p_table_id VARCHAR,
     p_customer_name VARCHAR,
     p_customer_phone VARCHAR,
-    p_items_json JSONB,
+    p_items_json TEXT,
     p_discount_type VARCHAR DEFAULT 'NONE',
     p_discount_value NUMERIC DEFAULT 0.00,
     p_notes TEXT DEFAULT NULL,
@@ -831,6 +831,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
+    v_items JSONB;
     v_bill_id UUID;
     v_bill_number VARCHAR(50);
     v_sub_total NUMERIC(12, 2) := 0.00;
@@ -840,9 +841,10 @@ DECLARE
     v_grand_total NUMERIC(12, 2) := 0.00;
     v_round_off NUMERIC(6, 2) := 0.00;
     v_taxable_amount NUMERIC(12, 2) := 0.00;
-    v_item RECORD;
-    v_item_id VARCHAR(50);
+    v_elem JSONB;
+    v_item_id_str VARCHAR(50);
     v_item_name VARCHAR(150);
+    v_item_notes TEXT;
     v_qty NUMERIC(10, 2);
     v_unit_price NUMERIC(12, 2);
     v_item_tax_rate NUMERIC(5, 2);
@@ -851,8 +853,14 @@ DECLARE
     v_table_status VARCHAR(50);
     v_seq_num INT;
 BEGIN
+    BEGIN
+        v_items := p_items_json::JSONB;
+    EXCEPTION WHEN OTHERS THEN
+        v_items := '[]'::JSONB;
+    END;
+
     -- Logical check: items payload validation
-    IF p_items_json IS NULL OR jsonb_array_length(p_items_json) = 0 THEN
+    IF v_items IS NULL OR jsonb_array_length(v_items) = 0 THEN
         RETURN QUERY SELECT FALSE, 'EMPTY_BILL'::VARCHAR, 'Cannot create bill without items'::VARCHAR, NULL::VARCHAR, 0, 0, NULL::JSONB;
         RETURN;
     END IF;
@@ -872,17 +880,13 @@ BEGIN
     v_bill_id := gen_random_uuid();
 
     -- Calculate subtotal from items array
-    FOR v_item IN SELECT * FROM jsonb_to_recordset(p_items_json) AS x(
-        itemId VARCHAR,
-        itemName VARCHAR,
-        quantity NUMERIC,
-        unitPrice NUMERIC,
-        taxRate NUMERIC,
-        notes TEXT
-    ) LOOP
-        v_qty := GREATEST(v_item.quantity, 1);
-        v_unit_price := GREATEST(v_item.unitPrice, 0);
-        v_item_tax_rate := COALESCE(v_item.taxRate, 5.00);
+    FOR v_elem IN SELECT * FROM jsonb_array_elements(v_items) LOOP
+        v_item_id_str := COALESCE(v_elem->>'itemId', v_elem->>'item_id');
+        v_item_name := COALESCE(v_elem->>'itemName', v_elem->>'item_name', 'Item');
+        v_qty := GREATEST(COALESCE((v_elem->>'quantity')::NUMERIC, 1.00), 1.00);
+        v_unit_price := GREATEST(COALESCE((v_elem->>'unitPrice')::NUMERIC, (v_elem->>'unit_price')::NUMERIC, (v_elem->>'price')::NUMERIC, 0.00), 0.00);
+        v_item_tax_rate := GREATEST(COALESCE((v_elem->>'taxRate')::NUMERIC, (v_elem->>'tax_rate')::NUMERIC, 5.00), 0.00);
+        v_item_notes := v_elem->>'notes';
         
         -- Line item calculation
         v_item_total := ROUND((v_qty * v_unit_price)::NUMERIC, 2);
@@ -898,9 +902,9 @@ BEGIN
         ) VALUES (
             gen_random_uuid(),
             v_bill_id,
-            CASE WHEN v_item.itemId ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN v_item.itemId::uuid ELSE NULL END,
-            v_item.itemName, v_qty,
-            v_unit_price, v_item_tax_rate, v_item_tax_amt, v_item_total, v_item.notes, FALSE, CURRENT_TIMESTAMP
+            CASE WHEN v_item_id_str ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN v_item_id_str::uuid ELSE NULL END,
+            v_item_name, v_qty,
+            v_unit_price, v_item_tax_rate, v_item_tax_amt, v_item_total, v_item_notes, FALSE, CURRENT_TIMESTAMP
         );
     END LOOP;
 
@@ -970,6 +974,35 @@ BEGIN
             'billStatus', 'ACTIVE'
         );
 END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_CreateBill(
+    p_order_type VARCHAR,
+    p_table_id VARCHAR,
+    p_customer_name VARCHAR,
+    p_customer_phone VARCHAR,
+    p_items_json JSONB,
+    p_discount_type VARCHAR DEFAULT 'NONE',
+    p_discount_value NUMERIC DEFAULT 0.00,
+    p_notes TEXT DEFAULT NULL,
+    p_cashier_id VARCHAR DEFAULT 'CASHIER'
+)
+RETURNS TABLE (
+    is_successful BOOLEAN,
+    res_code VARCHAR,
+    res_msg VARCHAR,
+    created_id VARCHAR,
+    total_records INT,
+    max_pages INT,
+    result_data JSONB
+)
+LANGUAGE sql
+AS $$
+    SELECT * FROM fn_CreateBill(
+        p_order_type, p_table_id, p_customer_name, p_customer_phone,
+        p_items_json::TEXT,
+        p_discount_type, p_discount_value, p_notes, p_cashier_id
+    );
 $$;
 
 -- fn_SettleBill: Finalizes payment, records transaction, updates table to AVAILABLE
@@ -1230,7 +1263,7 @@ BEGIN
             'billId', b.bill_id::text,
             'billNumber', b.bill_number,
             'orderType', b.order_type,
-            'tableNumber', COALESCE(t.table_number, 'N/A'),
+            'tableNumber', COALESCE(b.table_number, 'N/A'),
             'customerName', b.customer_name,
             'subTotal', b.sub_total,
             'discountAmount', b.discount_amount,
@@ -1302,29 +1335,35 @@ BEGIN
     -- Top 5 Selling Items Today
     SELECT jsonb_agg(
         jsonb_build_object(
-            'itemName', bi.item_name,
-            'totalQty', SUM(bi.quantity),
-            'totalRevenue', SUM(bi.total_price)
+            'itemName', sub.item_name,
+            'totalQty', sub.total_qty,
+            'totalRevenue', sub.total_rev
         )
     ) INTO v_top_items
-    FROM tbl_BillItems bi
-    JOIN tbl_Bills b ON b.bill_id = bi.bill_id
-    WHERE b.created_at::DATE = p_date AND b.bill_status = 'SETTLED' AND bi.is_cancelled = FALSE
-    GROUP BY bi.item_name
-    ORDER BY SUM(bi.quantity) DESC
-    LIMIT 5;
+    FROM (
+        SELECT bi.item_name, SUM(bi.quantity) AS total_qty, SUM(bi.total_price) AS total_rev
+        FROM tbl_BillItems bi
+        JOIN tbl_Bills b ON b.bill_id = bi.bill_id
+        WHERE b.created_at::DATE = p_date AND b.bill_status = 'SETTLED' AND bi.is_cancelled = FALSE
+        GROUP BY bi.item_name
+        ORDER BY SUM(bi.quantity) DESC
+        LIMIT 5
+    ) sub;
 
     -- Payment Mode Breakdown
     SELECT jsonb_agg(
         jsonb_build_object(
-            'paymentMode', b.payment_mode,
-            'count', COUNT(*),
-            'amount', SUM(b.grand_total)
+            'paymentMode', sub.payment_mode,
+            'count', sub.cnt,
+            'amount', sub.amt
         )
     ) INTO v_payment_breakdown
-    FROM tbl_Bills b
-    WHERE b.created_at::DATE = p_date AND b.bill_status = 'SETTLED'
-    GROUP BY b.payment_mode;
+    FROM (
+        SELECT b.payment_mode, COUNT(*) AS cnt, SUM(b.grand_total) AS amt
+        FROM tbl_Bills b
+        WHERE b.created_at::DATE = p_date AND b.bill_status = 'SETTLED'
+        GROUP BY b.payment_mode
+    ) sub;
 
     RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Dashboard metrics calculated'::VARCHAR, NULL::VARCHAR, 1, 1,
         jsonb_build_object(
@@ -1377,27 +1416,36 @@ BEGIN
       AND created_at::DATE >= p_from_date
       AND created_at::DATE <= p_to_date
       AND (p_payment_mode IS NULL OR payment_mode = p_payment_mode)
-      AND (p_cashier_id IS NULL OR cashier_id = p_cashier_id);
+      AND (p_cashier_id IS NULL OR cashier_id::text = p_cashier_id);
 
     -- Group by Day for chart/table view
     SELECT jsonb_agg(
         jsonb_build_object(
-            'reportDate', to_char(d.day_date, 'YYYY-MM-DD'),
-            'ordersCount', COUNT(b.bill_id),
-            'subTotal', COALESCE(SUM(b.sub_total), 0.00),
-            'discount', COALESCE(SUM(b.discount_amount), 0.00),
-            'tax', COALESCE(SUM(b.tax_amount), 0.00),
-            'netRevenue', COALESCE(SUM(b.grand_total), 0.00)
+            'reportDate', to_char(sub.day_date, 'YYYY-MM-DD'),
+            'ordersCount', sub.orders_count,
+            'subTotal', sub.sub_total,
+            'discount', sub.discount,
+            'tax', sub.tax,
+            'netRevenue', sub.net_revenue
         )
     ) INTO v_daily_trend
     FROM (
-        SELECT generate_series(p_from_date, p_to_date, '1 day'::interval)::DATE AS day_date
-    ) d
-    LEFT JOIN tbl_Bills b ON b.created_at::DATE = d.day_date AND b.bill_status = 'SETTLED'
-        AND (p_payment_mode IS NULL OR b.payment_mode = p_payment_mode)
-        AND (p_cashier_id IS NULL OR b.cashier_id = p_cashier_id)
-    GROUP BY d.day_date
-    ORDER BY d.day_date ASC;
+        SELECT
+            d.day_date,
+            COUNT(b.bill_id) AS orders_count,
+            COALESCE(SUM(b.sub_total), 0.00) AS sub_total,
+            COALESCE(SUM(b.discount_amount), 0.00) AS discount,
+            COALESCE(SUM(b.tax_amount), 0.00) AS tax,
+            COALESCE(SUM(b.grand_total), 0.00) AS net_revenue
+        FROM (
+            SELECT generate_series(p_from_date, p_to_date, '1 day'::interval)::DATE AS day_date
+        ) d
+        LEFT JOIN tbl_Bills b ON b.created_at::DATE = d.day_date AND b.bill_status = 'SETTLED'
+            AND (p_payment_mode IS NULL OR b.payment_mode = p_payment_mode)
+            AND (p_cashier_id IS NULL OR b.cashier_id::text = p_cashier_id)
+        GROUP BY d.day_date
+        ORDER BY d.day_date ASC
+    ) sub;
 
     RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Sales report generated'::VARCHAR, NULL::VARCHAR, v_total_orders, 1,
         jsonb_build_object(
@@ -1437,7 +1485,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION fn_UpdateSettings(
-    p_settings_json JSONB,
+    p_settings_json TEXT,
     p_actor_id VARCHAR DEFAULT 'SYSTEM'
 )
 RETURNS TABLE (
@@ -1452,10 +1500,17 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
+    v_settings JSONB;
     v_key TEXT;
     v_val TEXT;
 BEGIN
-    FOR v_key, v_val IN SELECT key, value#>>'{}' FROM jsonb_each(p_settings_json) LOOP
+    BEGIN
+        v_settings := p_settings_json::JSONB;
+    EXCEPTION WHEN OTHERS THEN
+        v_settings := '{}'::JSONB;
+    END;
+
+    FOR v_key, v_val IN SELECT key, value#>>'{}' FROM jsonb_each(v_settings) LOOP
         UPDATE tbl_Settings
         SET setting_value = v_val, updated_at = CURRENT_TIMESTAMP
         WHERE setting_key = v_key;
@@ -1466,8 +1521,26 @@ BEGIN
         END IF;
     END LOOP;
 
-    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'SETTINGS_UPDATED', 'SETTINGS', 'Updated business configurations', 'GLOBAL_SETTINGS', NULL, p_settings_json);
+    PERFORM fn_LogActivity(p_actor_id, p_actor_id, 'SETTINGS_UPDATED', 'SETTINGS', 'Updated business configurations', 'GLOBAL_SETTINGS', NULL, v_settings);
 
-    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Settings saved successfully'::VARCHAR, NULL::VARCHAR, 1, 1, p_settings_json;
+    RETURN QUERY SELECT TRUE, 'SUCCESS'::VARCHAR, 'Settings saved successfully'::VARCHAR, NULL::VARCHAR, 1, 1, v_settings;
 END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_UpdateSettings(
+    p_settings_json JSONB,
+    p_actor_id VARCHAR DEFAULT 'SYSTEM'
+)
+RETURNS TABLE (
+    is_successful BOOLEAN,
+    res_code VARCHAR,
+    res_msg VARCHAR,
+    created_id VARCHAR,
+    total_records INT,
+    max_pages INT,
+    result_data JSONB
+)
+LANGUAGE sql
+AS $$
+    SELECT * FROM fn_UpdateSettings(p_settings_json::TEXT, p_actor_id);
 $$;
