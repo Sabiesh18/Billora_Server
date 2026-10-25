@@ -27,7 +27,7 @@ public class MenuItemDto {
     private BigDecimal price;
 
     private String foodType = "VEG"; // VEG, NON_VEG, BEVERAGE, DESSERT
-    private BigDecimal taxRate = new BigDecimal("5.00");
+    private BigDecimal taxRate;
     private Boolean isAvailable = true;
     private Boolean isActive = true;
 

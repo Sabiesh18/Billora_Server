@@ -25,7 +25,7 @@ public class MenuItemRepositoryImpl implements IMenuItemRepository {
                 dto.getDescription(),
                 dto.getPrice(),
                 dto.getFoodType(),
-                dto.getTaxRate(),
+                dto.getTaxRate() != null ? dto.getTaxRate() : new java.math.BigDecimal("5.00"),
                 dto.getAvailable(),
                 actorId != null ? actorId : "SYSTEM"
         };
